@@ -30,7 +30,9 @@ module Parser
   ),
   Program,
   parse,
-  parseFile
+  parseFile,
+  parseInt,
+  parseDouble
 )
 where
 
