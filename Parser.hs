@@ -26,6 +26,8 @@ module Parser
     READI, READR, READC,
     WRITEI, WRITER, WRITEC,
     STOP,
+    CORE,
+    TRACE,
     LABEL
   ),
   Program,
@@ -77,6 +79,8 @@ data Instr = PUSH Addr | PUSHI (Maybe Reg) | PUSHA Addr | PUSHR Reg
            | READI | READR | READC
            | WRITEI | WRITER | WRITEC
            | STOP
+           | CORE
+           | TRACE Integer
            | LABEL Label
            deriving Show
 
@@ -235,7 +239,8 @@ parseNoArgs =
   ((string "WRITEI") >> return WRITEI) +++
   ((string "WRITER") >> return WRITER) +++
   ((string "WRITEC") >> return WRITEC) +++
-  ((string "STOP") >> return STOP)
+  ((string "STOP") >> return STOP) +++
+  ((string "CORE") >> return CORE)
 
 parseNumArg :: ReadP Instr
 parseNumArg =
@@ -245,7 +250,8 @@ parseNumArg =
   ((string "ALLOC") >> parseSpaces >> parseInt >>= allocop) +++
   ((string "RET") >> parseSpaces >> parseInt >>= retop) +++
   ((string "PUSHR") >> parseSpaces >> parseInt >>= pushrop) +++
-  ((string "POPR") >> parseSpaces >> parseInt >>= poprop) 
+  ((string "POPR") >> parseSpaces >> parseInt >>= poprop) +++
+  ((string "TRACE") >> parseSpaces >> parseInt >>= traceop) 
 
   where constiop v = return (CONSTI v)
         constrop v = return (CONSTR v)
@@ -254,6 +260,7 @@ parseNumArg =
         retop    v = return (RET v)
         pushrop  v = return (PUSHR v)
         poprop   v = return (POPR v)
+        traceop  v = return (TRACE v)
 
 parseAddrArg :: ReadP Instr
 parseAddrArg =

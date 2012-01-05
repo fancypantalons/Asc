@@ -19,6 +19,7 @@ data State = State {
                sp      :: Integer,
                hp      :: Integer,
                running :: Bool,
+               tracing :: Bool,
                display :: RegisterSet,
                stack   :: Memory,
                program :: InstrList,
@@ -66,7 +67,8 @@ newState p = State {
              sp      = 0,
              hp      = 32768,
              blocks  = [],
-             running = True
+             running = True,
+             tracing = False
            }
   where listing = resolveLabels p
         len     = fromIntegral $ length listing
@@ -222,14 +224,14 @@ execute state NOT = return $ pushi newState (result val)
 execute state (IFZ a) = return $ newState { pc = addr }
   where (val, newState) = popi state
         addr = case val of
-                 1 -> translate state a
-                 0 -> pc state
+                 0 -> translate state a
+                 1 -> pc state
 
 execute state (IFNZ a) = return $ newState { pc = addr }
   where (val, newState) = popi state
         addr = case val of
-                 0 -> translate state a
-                 1 -> pc state
+                 1 -> translate state a
+                 0 -> pc state
 
 execute state (GOTO a) = return $ state { pc = translate state a }
 
@@ -247,16 +249,32 @@ execute state (RET r) = return $ s3 { pc = oldpc }
 execute state READI = do
   l <- getLine
   
-  case (readP_to_S parseInt l) of
+  case (readP_to_S pi l) of
     []          -> error "That integer was no good anyway"
     (v, _):_ -> return $ pushi state v
+
+  where pi = do
+          skipSpaces
+          v <- parseInt
+          skipSpaces
+          eof
+
+          return v
 
 execute state READR = do
   l <- getLine
 
-  case (readP_to_S parseDouble l) of
+  case (readP_to_S pd l) of
     []          -> error "Double bad"
     (v, _):_ -> return $ pushd state v
+
+  where pd = do
+          skipSpaces
+          v <- parseDouble
+          skipSpaces
+          eof
+
+          return v
 
 execute state READC = do 
   c <- getChar
@@ -281,9 +299,22 @@ execute state WRITEC = do
   where (val, s2) = popi state
 
 execute state STOP = return $ state { running = False }
+execute state CORE = do
+  putStrLn $ show state
+  execute state STOP
+
+execute state (TRACE v) = return $ state { tracing = val }
+  where val = if (v == 0) 
+                then False
+                else True
 
 runOnce :: State -> IO State
-runOnce state = execute s2 instr >>= return
+runOnce state = do
+  if (tracing state)
+    then putStrLn $ show instr
+    else return ()
+
+  execute s2 instr >>= return
   where instr = program state ! pc state
         s2    = state { pc = pc state + 1 }
 
