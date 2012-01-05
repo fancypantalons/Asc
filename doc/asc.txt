@@ -1,0 +1,118 @@
+415 CMPUT - Compiler Design The ASC Assembly Language 1. Introduction This
+document describes the ASC Assembly Language for an imaginary stack machine
+(SM) computer. This language is used for CMPUT 415 because it greatly simplies
+the code generation phase of your project. Considerations such as variable
+length instructions, register allocation, and complex addressing modes are
+eliminated, leaving a very simple assembly language. The ASC interpreter can be
+found on the 415 web page. The interpreter takes one argument, the name of a le
+containing ASC code. ASC programs read all their input from standard input and
+write all their output to standard output. This document describes the
+architecture of the stack machine and describes the instructions it can
+execute. 2. Machine Organization Memory is organized into two segments. The
+program segment contains the ASC code of the program. All instructions are 1
+word in length. The program counter register (PC) points to the next
+instruction of ASC code to be executed and initially points to the rst
+executable instruction of your program. The memory segment is organized as a
+stack. All memory is in units of 1 word (4 bytes). The stack pointer (SP)
+  points to the top of the stack. The stack grows upward starting at address 0.
+  There is an array of 16 registers, called the Display, which are used in the
+  implementation of procedures and addressing. Each of these registers points
+  to a location in the stack. The only way of changing display registers is
+  through procedure calls and returns. The display registers are initialized to
+  zero. The stack pointer always points to the next available location in
+  memory and is initialized to -1. A data address can be absolute or relative.
+  An address of 10 implies an absolute address, referring to data at stack
+  address 10 (actually, the 11th entry on the stack because addresses start at
+              0). An address of 10[5] implies a relative address referring to
+  the stack address obtained by adding 10 to the contents of Display Register
+  5. The SM also supports dynamic memory allocation. Dynamic memory is taken
+  from the top end of the stack and grows downward. Instructions use the stack
+  in a postx manner. To perform an instruction "a op b" involves executing the
+  instructions to "PUSH a" on the stack, "PUSH b" on the stack, and then
+  perform "op" on the top two stack entries. "op" has the effect of POPing the
+  top two entries off the stack and PUSHing the result of the operation. Some
+  of the ASC instruction descriptions may seem confusing, but they are all
+  consistent with this postx notation of doing things. Asc Manual 3.
+  Instruction Format ASC statements take the form of LABEL OPCODE OP1,OP2
+#comment where Label is the statement label, OPCODE is a valid ASC instruction,
+  OP1 and OP2 are the instruction operands. LABELs can be any legal character
+  string, but cannot be the same as an OPCODE. LABELs and OPCODEs can be in
+  either upper or lower case. Characters following a # are treated as comments
+  and ignored. Only one ASC instruction can appear per line. The following
+  sections of this document describe the ASC instruction set. For each
+  instruction an alphanumeric instruction name, arguments, and a short
+  description of its operation are presented. The description of most of the
+  opcodes is done using the operations of PUSHing and POPing an element to/from
+  the stack top. The following abbreviations are used: n r reg addr an integer
+  constant, a real constant, a display register number (0 through 15), either a
+  relative or absolute address. An absolute address is given by specifying a
+  stack location address. A relative address is specied as n[reg], where reg is
+  a display register and n is the offset. statement label. lab 4. Stack
+  Operations 1) PUSH addr 2) PUSHI reg The SP is incremented. The value from
+  the stack whose address is specied is placed on the top of the stack. The
+  value on the top of the stack indexed by Display Register reg species an
+  address. From this location, the value stored there overwrites the top entry
+  on the stack. PUSH the absolute address of the data referenced by addr. If
+  addr is an absolute address, this instruction is equivalent to a CONSTI
+  instruction. If addr is relative, then the value of the display register plus
+  the offset is PUSHed. The value on the top of the stack is placed in the
+  location whose address is specied by addr. The SP is decremented. The value
+  on the top of the stack is placed in the location whose address is specied by
+  the value below it on the stack indexed by reg. The SP is decremented by 2.
+  PUSH the integer constant n on the top of the stack. PUSH the real constant r
+  on the top of the stack. Duplicate the value on the top of the stack. The
+  value on the top of the stack is PUSHed. This instruction modies the value of
+  SP by n. n may be positive, negative, or zero. 3) PUSHA addr 4) POP addr 5)
+  POPI reg 6) CONSTI n 7) CONSTR r 8) DUP 9) ADJUST n Asc Manual 10) ALLOC n
+  11) FREE Allocate n>0 words. The stack address of the allocated storage is
+  PUSHed on top. ALLOCated storage is freed up for use (the size is the same as
+                                                        allocated by the
+                                                        corresponding ALLOC).
+  The addr to be freed is POPed from the stack. 5. Arithmetic Operations 1)
+  ADDI 2) ADDR POP the top two items off the stack, perform addition, and PUSH
+  the result. The ADDI instruction does integer arithmetic; ADDR does real
+  arithmetic. POP the top two items off the stack, perform subtraction, PUSH
+  and the result. The number on top of the stack is subtracted from the value
+  below it. The SUBI instruction does integer arithmetic; SUBR does real
+  arithmetic. POP the top two items off the stack, perform multiplication, and
+  PUSH the result. The MULI instruction does integer arithmetic; MULR does real
+  arithmetic. POP the top two items off the stack, perform division, and PUSH
+  the result. The number on top of the stack is divided into the value below
+  it. The DIVI instruction does integer arithmetic; DIVR does real arithmetic.
+  POP the top two items off the stack, perform integer division, and PUSH the
+  remainder. The number on top of the stack is divided into the value below it.
+  Convert the integer value on the top of the stack to a real value. Convert
+  the real value on the top of the stack to an integer value. 3) SUBI 4) SUBR
+  5) MULI 6) MULR 7) DIVI 8) DIVR 9) MOD 10) ITOR 11) RTOI 6. Logical
+  Operations 1) EQI 2) EQR POP the top two items off the stack, perform an
+  equality comparison, and PUSH 1 if it is true, 0 otherwise. The EQI
+  instruction does integer comparison; EQR does real comparison. POP the top
+  two items off the stack, perform a less than comparison, and PUSH 1 if the
+  number on top of the stack is greater than the number below it, and PUSH 0
+  otherwise. The LTI instruction does integer comparison; LTR does real
+  comparison. 3) LTI 4) LTR 5) GTI Asc Manual 6) GTR POP the top two items off
+  the stack, perform a greater than comparison, and PUSH 1 if the number on top
+  of the stack is less than the number below it, and PUSH 0 otherwise. The GTI
+  instruction does integer comparison; GTR does real comparison. POP the top
+  two items off the stack and PUSH 1 if either of the top 2 values is not 0,
+  and PUSH 0 otherwise. POP the top two items off the stack and PUSH 1 if both
+  of the top 2 values are not 0, and PUSH 0 otherwise. POP the stack and
+  perform a negation. PUSH 1 if the popped value is zero and PUSH 0 otherwise.
+  7) OR 8) AND 9) NOT 7. Control Flow 1) IFZ lab 2) IFNZ lab 3) IFERR lab POP
+  the stack. Transfer control to the statement with label lab if the value is
+  zero. POP the stack. Transfer control to the statement with label lab if the
+  value is not zero. Transfers control to the statement with label lab if the
+  error ag is set. The error ag is set by a) reading instructions: READI, READR
+  (no number can be read from input), and by READC (reading at the end of le);
+  b) integer arithmetic instructions: ADDI, SUBI, MULI, RTOI (integer overow),
+  and DIVI and MOD (division by 0). Unconditionally transfers control to the
+  statement with label lab. Halt the program. 4) GOTO lab 5) STOP 8. Subroutine
+  Linkage 1) CALL reg,lab The current value of the program counter is PUSHed
+  onto the stack and the PC is set to the address corresponding to lab. Display
+  register reg is also PUSHed onto the stack. The value of display register reg
+  is set to SP (pointing to the next free stack location AFTER the PC and
+                display have been pushed). The stack is POPed and the value put
+  in Display Register reg. The stack is POPed again and the value placed in the
+  PC. 2) RET reg 9. Input and Output 1) READI 2) READR These instructions read
+  the next number on the standard input and PUSH it on the top of the stack.
+  The READI instruction reads an i... 
