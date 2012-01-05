@@ -158,7 +158,9 @@ cmp pred a b = case (pred a b) of
 --
 execute :: State -> Instr -> IO State
 execute state (PUSH a) = return $ push state (stackGet state $ translate state a)
-execute state (PUSHI Nothing) = return $ push state (stackTop state)
+execute state (PUSHI Nothing) = return $ push newState (stackGet state top)
+  where (top, newState) = popi state
+
 execute state (PUSHI (Just r)) = return $ push state (stackGet state $ ((stackTopI state) + regGet state r))
 execute state (PUSHA a) = return $ pushi state (translate state a)
 execute state (PUSHR r) = return $ pushi state (regGet state r)
@@ -187,8 +189,13 @@ execute state (CONSTR v) = return $ pushd state v
 execute state DUP = return $ push state (stackTop state)
 execute state (ADJUST v) = return $ state { sp = sp state + v }
 
-execute state (ALLOC i) = return state
-execute state FREE = return state
+execute state (ALLOC i) = return $ pushi newState (hp newState)
+  where newBlocks = (i:(blocks state))
+        newState = state { hp = hp state - i, blocks = newBlocks }
+
+execute state FREE = return newState
+  where (blk:rest) = blocks state
+        newState = state { hp = hp state + blk, blocks = rest }
 
 execute state ADDI = return $ combinei (+) state
 execute state ADDR = return $ combined (+) state
