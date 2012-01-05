@@ -2,8 +2,33 @@ module Parser
 (
   Label,
   Reg,
-  Addr,
-  Instr,
+  Addr(Absolute, Named, Relative),
+  Instr(
+    PUSH, PUSHI, PUSHA,
+    POP, POPI,
+    CONSTI, CONSTR,
+    DUP,
+    ADJUST,
+    ALLOC, FREE,
+    ADDI, ADDR,
+    SUBI, SUBR,
+    MULI, MULR,
+    DIVI, DIVR,
+    MOD,
+    ITOR, RTOI,
+    EQI, EQR,
+    LTI, LTR,
+    GTI, GTR,
+    OR, AND, NOT,
+    IFZ, IFNZ, IFERR,
+    GOTO,
+    CALL, RET,
+    READI, READR, READC,
+    WRITEI, WRITER, WRITEC,
+    STOP,
+    LABEL
+  ),
+  Program,
   parse,
   parseFile
 )
@@ -52,6 +77,8 @@ data Instr = PUSH Addr | PUSHI (Maybe Reg) | PUSHA Addr
            | STOP
            | LABEL Label
            deriving Show
+
+type Program = [([Label], Instr)]
 
 --
 -- Given a predicate and a list, take each element and turn it into a list,
@@ -314,7 +341,7 @@ parseInstrs lines = foldr (++) [] $ map doParse preprocessed
 -- represents a pair containing an instruction and zero or more labels 
 -- associated with that location in the source file.
 --
-parse :: [String] -> [([Label], Instr)]
+parse :: [String] -> Program
 parse lines = collapse $ collectPairs isLabel $ parseInstrs lines
   -- The collectPairs call above collapses series of labels together into
   -- a single array, and places the rest in their own arrays.  Collapse
@@ -334,6 +361,6 @@ parse lines = collapse $ collectPairs isLabel $ parseInstrs lines
 --
 -- Parse the contents of the specified file.
 --
-parseFile :: String -> IO [([Label], Instr)]
+parseFile :: String -> IO Program
 parseFile s =  liftM (parse . lines) $ readFile s
 
