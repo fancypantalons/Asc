@@ -4,8 +4,8 @@ module Parser
   Reg,
   Addr(Absolute, Named, Relative),
   Instr(
-    PUSH, PUSHI, PUSHA,
-    POP, POPI,
+    PUSH, PUSHI, PUSHA, PUSHR,
+    POP, POPI, POPR,
     CONSTI, CONSTR,
     DUP,
     ADJUST,
@@ -54,8 +54,8 @@ data Addr = Absolute Integer
           | Relative Reg Integer
           deriving Show
 
-data Instr = PUSH Addr | PUSHI (Maybe Reg) | PUSHA Addr
-           | POP Addr | POPI (Maybe Reg)
+data Instr = PUSH Addr | PUSHI (Maybe Reg) | PUSHA Addr | PUSHR Reg
+           | POP Addr | POPI (Maybe Reg) | POPR Reg
            | CONSTI Integer | CONSTR Double
            | DUP
            | ADJUST Integer
@@ -243,13 +243,17 @@ parseNumArg =
   ((string "CONSTR") >> parseSpaces >> parseDouble >>= constrop) +++
   ((string "ADJUST") >> parseSpaces >> parseInt >>= adjustop) +++
   ((string "ALLOC") >> parseSpaces >> parseInt >>= allocop) +++
-  ((string "RET") >> parseSpaces >> parseInt >>= retop)
+  ((string "RET") >> parseSpaces >> parseInt >>= retop) +++
+  ((string "PUSHR") >> parseSpaces >> parseInt >>= pushrop) +++
+  ((string "POPR") >> parseSpaces >> parseInt >>= poprop) 
 
   where constiop v = return (CONSTI v)
         constrop v = return (CONSTR v)
         adjustop v = return (ADJUST v)
         allocop  v = return (ALLOC v)
         retop    v = return (RET v)
+        pushrop  v = return (PUSHR v)
+        poprop   v = return (POPR v)
 
 parseAddrArg :: ReadP Instr
 parseAddrArg =

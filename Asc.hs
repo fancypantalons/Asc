@@ -5,6 +5,7 @@ import Array
 import Data.List
 import Text.ParserCombinators.ReadP
 import Data.Char
+import System (getArgs)
 
 data Slot = ISlot Integer | DSlot Double | Empty
           deriving Show
@@ -158,6 +159,7 @@ execute state (PUSH a) = return $ push state (stackGet state $ translate state a
 execute state (PUSHI Nothing) = return $ push state (stackTop state)
 execute state (PUSHI (Just r)) = return $ push state (stackGet state $ ((stackTopI state) + regGet state r))
 execute state (PUSHA a) = return $ pushi state (translate state a)
+execute state (PUSHR r) = return $ pushi state (regGet state r)
 
 execute state (POP a) = return $ stackSet newState (translate state a) top
   where (top, newState) = pop state
@@ -173,6 +175,9 @@ execute state (POPI (Just r)) = return $ stackSet newState addr val
           let (v, s) = pop state 
               ((ISlot a), s2) = pop s
           in (v, a + (regGet state r), s2)
+
+execute state (POPR r) = return $ regSet newState r val
+  where (val, newState) = popi state
 
 execute state (CONSTI v) = return $ pushi state v
 execute state (CONSTR v) = return $ pushd state v
@@ -232,7 +237,7 @@ execute state (CALL r a) = return s4
   where s1 = pushi state $ pc state
         s2 = pushi s1 $ regGet state r
         s3 = s2 { pc = translate s2 a }
-        s4 = regSet state r (sp s3)
+        s4 = regSet s3 r (sp s3)
 
 execute state (RET r) = return $ s3 { pc = oldpc }
   where (oldreg, s1) = popi state
@@ -299,9 +304,17 @@ loadFile f = do
 
   return $ newState p
 
-main :: IO ()
-main = do
-  loadFile "test.asc" >>= run
-
+showHelp :: IO ()
+showHelp = do
+  putStrLn "Usage: ./Asc <file> <file> <file> ..."
   return ()
 
+main :: IO ()
+main = do
+  args <- getArgs
+
+  case args of
+    []    -> showHelp
+    files -> mapM_ (\f -> loadFile f >>= run) args
+
+  return ()
