@@ -1,0 +1,5 @@
+*.sw[po]
+*.hi
+*.o
+*.aux
+Asc
