@@ -80,7 +80,7 @@ data Instr = PUSH Addr | PUSHI (Maybe Reg) | PUSHA Addr | PUSHR Reg
            | WRITEI | WRITER | WRITEC
            | STOP
            | CORE
-           | TRACE Integer
+           | TRACE (Maybe Integer)
            | LABEL Label
            deriving Show
 
@@ -240,7 +240,8 @@ parseNoArgs =
   ((string "WRITER") >> return WRITER) +++
   ((string "WRITEC") >> return WRITEC) +++
   ((string "STOP") >> return STOP) +++
-  ((string "CORE") >> return CORE)
+  ((string "CORE") >> return CORE) +++
+  ((string "TRACE") >> return (TRACE Nothing))
 
 parseNumArg :: ReadP Instr
 parseNumArg =
@@ -260,7 +261,7 @@ parseNumArg =
         retop    v = return (RET v)
         pushrop  v = return (PUSHR v)
         poprop   v = return (POPR v)
-        traceop  v = return (TRACE v)
+        traceop  v = return (TRACE (Just v))
 
 parseAddrArg :: ReadP Instr
 parseAddrArg =
