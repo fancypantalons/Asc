@@ -1,6 +1,8 @@
 module Asc where
 
 import Parser
+import Heap as Heap
+
 import Text.ParserCombinators.ReadP
 import Data.Array.IArray
 import Data.List
@@ -21,12 +23,11 @@ data State = State {
                running :: ! Bool,
                pc      :: ! Integer,
                sp      :: ! Integer,
-               hp      :: ! Integer,
                tracing :: ! Bool,
                display :: ! RegisterSet,
                stack   :: ! Memory,
                program :: ! InstrList,
-               blocks  :: ! [Integer]
+               heap    :: ! Heap.HeapInfo
              } deriving Show
 
 --
@@ -78,8 +79,7 @@ newState p = State {
              program = listArray (0, len - 1) listing,
              pc      = 0,
              sp      = 0,
-             hp      = 32768,
-             blocks  = [],
+             heap    = Heap.newHeap 32768,
              running = True,
              tracing = False
            }
@@ -206,13 +206,14 @@ execute state (CONSTR v) = return $ pushd state v
 execute state DUP = return $ push state $! stackTop state
 execute state (ADJUST v) = return $ state { sp = sp state + v }
 
-execute state (ALLOC i) = return $ pushi newState (hp newState)
-  where newBlocks = (i:(blocks state))
-        newState = state { hp = hp state - i, blocks = newBlocks }
+execute state (ALLOC i) = return $ pushi newState addr
+  where (newHeap, addr) = Heap.allocate (heap state) i
+        newState = state { heap = newHeap }
 
 execute state FREE = return newState
-  where (blk:rest) = blocks state
-        newState = state { hp = hp state + blk, blocks = rest }
+  where (addr, s1) = popi state
+        newHeap = Heap.free (heap s1) addr
+        newState = s1 { heap = newHeap }
 
 execute state ADDI = return $ combinei (+) state
 execute state ADDR = return $ combined (+) state
@@ -237,13 +238,12 @@ execute state LTR = return $ combinedi (cmp (<)) state
 execute state GTI = return $ combinei (cmp (>)) state
 execute state GTR = return $ combinedi (cmp (>)) state
 
-execute state OR = return $ combinei (cmp (\a b -> (a == 1) || (b == 1))) state
-execute state AND = return $ combinei (cmp (\a b -> (a == 1) && (b == 1))) state
+execute state OR = return $ combinei (cmp (\a b -> (a /= 0) || (b /= 0))) state
+execute state AND = return $ combinei (cmp (\a b -> (a /= 0) && (b /= 0))) state
 execute state NOT = return $ pushi newState (result val)
   where (val, newState) = popi state
         result 1 = 0
-        result 0 = 1
-        result _ = error "Buh?"
+        result _ = 1
 
 execute state (IFZ a) = return $ newState { pc = addr }
   where (val, newState) = popi state
@@ -350,10 +350,9 @@ trace state instr True = do
   mapM_ putStrLn $ map (\g -> "Stk\t: [" ++ intercalate ", " g ++ "]") $ subgroups 10 st
   putStrLn $ "Ctrl\t: " ++ intercalate "\t" [ 
       "PC: " ++ (show $ pc state),
-      "SP: " ++ (show $ sp state),
-      "HP: " ++ (show $ hp state),
-      "Blks: " ++ (show $ length $ blocks state)
+      "SP: " ++ (show $ sp state)
     ]
+  putStrLn $ "Heap\t: " ++ (show $ heap state)
   putStrLn $ "Inst\t: " ++ (show instr) 
 
 runOnce :: State -> IO State
