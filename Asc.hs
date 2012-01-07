@@ -3,6 +3,9 @@ module Asc where
 import Parser
 import Heap as Heap
 
+import IO
+import System.IO
+
 import Text.ParserCombinators.ReadP
 import Data.Array.IArray
 import Data.Array.IO 
@@ -438,6 +441,8 @@ showHelp = do
 main :: IO ()
 main = do
   args <- getArgs
+
+  hSetBinaryMode stdout True
 
   case args of
     []    -> showHelp
