@@ -3,12 +3,12 @@ module Asc where
 import Parser
 import Heap as Heap
 
-import IO
 import System.IO
+import System.IO.Unsafe
 
 import Text.ParserCombinators.ReadP
 import Data.Array.IArray
-import Data.Array.IO 
+import Data.Array.IO
 import Data.List
 import Data.Char
 import System (getArgs)
@@ -28,8 +28,8 @@ data State = State {
                pc      :: ! Integer,
                sp      :: ! Integer,
                tracing :: ! Bool,
-               stack   :: ! Memory,
                display :: ! RegisterSet,
+               stack   :: ! Memory,
                program :: ! InstrList,
                heap    :: ! Heap.HeapInfo
              } 
@@ -105,22 +105,25 @@ translate state (Absolute i)   = i
 translate state (Relative r i) = val + i
   where !val = regGet state r
 
-stackGet :: State -> Integer -> IO Slot
-stackGet state i = readArray (stack state) i >>= return
+stackGet :: State -> Integer -> Slot
+stackGet state i = unsafePerformIO $ readArray (stack state) i
 
-stackSet :: State -> Integer -> Slot -> IO ()
-stackSet state i slot = writeArray (stack state) i slot
+stackSet :: State -> Integer -> Slot -> State
+stackSet state i slot = unsafePerformIO $ do
+  writeArray (stack state) i slot
 
-stackTop :: State -> IO Slot
+  return state
+
+stackElems :: State -> [Slot]
+stackElems state = unsafePerformIO $ getElems (stack state) 
+
+stackTop :: State -> Slot
 stackTop state = stackGet state $ (sp state - 1)
 
-stackTopI :: State -> IO Integer
-stackTopI state = do 
-  t <- stackTop state
-  
-  case t of
-    (ISlot val) -> return val
-    _           -> error "Expected integer but found something else"
+stackTopI :: State -> Integer
+stackTopI state = case (stackTop state) of
+                    (ISlot val) -> val
+                    _           -> error "Expected integer but found something else"
 
 regGet :: State -> Integer -> Integer
 regGet state i = (display state) ! i
@@ -128,59 +131,52 @@ regGet state i = (display state) ! i
 regSet :: State -> Integer -> Integer -> State
 regSet state i val = state { display = (display state) // [(i, val)] }
 
-push :: State -> Slot -> IO State
-push state slot = stackSet state (sp state) slot >> return (state { sp = sp state + 1 })
+push :: State -> Slot -> State
+push state slot = newState { sp = sp newState + 1 }
+  where newState = stackSet state (sp state) slot
 
-pushi :: State -> Integer -> IO State
+pushi :: State -> Integer -> State
 pushi state val = push state (ISlot val)
 
-pushd :: State -> Double -> IO State
+pushd :: State -> Double -> State
 pushd state val = push state (DSlot val)
 
-pop :: State -> IO (Slot, State)
+pop :: State -> (Slot, State)
 pop state 
   | (sp state) == 0 = error "Tried to pop past top of stack"
-  | otherwise       = do
-    slot <- stackGet state (sp state - 1)
+  | otherwise       = (slot, newState)
+  where newState = state { sp = sp state - 1 }
+        !slot     = stackGet newState (sp newState)
 
-    return (slot, state { sp = sp state - 1 })
-
-popi :: State -> IO (Integer, State)
-popi state = do
-  res <- pop state
-
-  case res of
-    ((ISlot val), state) -> return (val, state)
+popi :: State -> (Integer, State)
+popi state = 
+  case (pop state) of
+    ((ISlot val), state) -> (val, state)
     _                    -> error "Expected integer slot but found something else"
 
-popd :: State -> IO (Double, State)
-popd state = do
-  res <- pop state
-
-  case res of
-    ((DSlot val), state) -> return (val, state)
+popd :: State -> (Double, State)
+popd state =
+  case (pop state) of
+    ((DSlot val), state) -> (val, state)
     _                    -> error "Expected double slot but found something else"
 
-pop2 :: State -> IO (Slot, Slot, State)
-pop2 state = do
-  (a, s1) <- pop state 
-  (b, s2) <- pop s1
+pop2 :: State -> (Slot, Slot, State)
+pop2 state = let (a, s1) = pop state 
+                 (b, s2) = pop s1
+             in (a, b, s2)
 
-  return (a, b, s2)
+combine :: (Slot -> Slot -> Slot) -> State -> State
+combine op state = push newState result
+  where (a, b, newState) = pop2 state
+        result           = op b a
 
-combine :: (Slot -> Slot -> Slot) -> State -> IO State
-combine op state = do
-  (a, b, newState) <- pop2 state
-  
-  (push newState $ op b a) >>= return
-
-combinei :: (Integer -> Integer -> Integer) -> State -> IO State
+combinei :: (Integer -> Integer -> Integer) -> State -> State
 combinei op state = combine (\(ISlot a) (ISlot b) -> ISlot (op a b)) state
 
-combined :: (Double -> Double -> Double) -> State -> IO State
+combined :: (Double -> Double -> Double) -> State -> State
 combined op state = combine (\(DSlot a) (DSlot b) -> DSlot (op a b)) state
 
-combinedi :: (Double -> Double -> Integer) -> State -> IO State
+combinedi :: (Double -> Double -> Integer) -> State -> State
 combinedi op state = combine (\(DSlot a) (DSlot b) -> ISlot (op a b)) state
 
 cmp :: (a -> a -> Bool) -> a -> a -> Integer
@@ -192,137 +188,106 @@ cmp pred a b = case (pred a b) of
 -- Instruction execution logic.
 --
 execute :: State -> Instr -> IO State
-execute state (PUSH a) = stackGet state (translate state a) >>= push state >>= return
-execute state (PUSHI (Just r)) = do
-  top <- stackTopI state
+execute state (PUSH a) = return $ push state $! stackGet state $ translate state a
+execute state (PUSHI (Just r)) = return $ push state $! stackGet state $ ((stackTopI state) + regGet state r)
+execute state (PUSHI Nothing) = return $ push newState val
+  where (top, newState) = popi state
+        !val = stackGet state top
 
-  stackGet state (top + rval) >>= push state >>= return
+execute state (PUSHA a) = return $ pushi state (translate state a)
 
+execute state (POP a) = return $ stackSet newState (translate state a) top
+  where (top, newState) = pop state
+
+execute state (POPI (Just r)) = return $ stackSet newState addr val
   where !rval = regGet state r
+        (val, addr, newState) = 
+          let (v, s) = pop state 
+              ((ISlot a), s2) = pop s
+          in (v, a + rval, s2)
 
-execute state (PUSHI Nothing) = do
-  (top, newState) <- popi state
+execute state (POPI Nothing) = return $ stackSet newState addr val
+  where (val, addr, newState) = 
+          let (v, s) = pop state 
+              ((ISlot a), s2) = pop s
+          in (v, a, s2)
 
-  stackGet newState top >>= push newState >>= return
+execute state (CONSTI v) = return $ pushi state v
+execute state (CONSTR v) = return $ pushd state v
 
-execute state (PUSHA a) = pushi state (translate state a)
-
-execute state (POP a) = do
-  (top, newState) <- pop state
-
-  stackSet newState (translate state a) top
-  return newState
-
-execute state (POPI (Just r)) = do
-  let !rval = regGet state r
-  
-  (v, s) <- pop state
-  ((ISlot a), s2) <- pop s
-
-  stackSet s2 (a + rval) v
-  return s2
-
-execute state (POPI Nothing) = do
-  (v, s) <- pop state
-  ((ISlot a), s2) <- pop s
-
-  stackSet s2 a v
-  return s2
-
-execute state (CONSTI v) = pushi state v
-execute state (CONSTR v) = pushd state v
-
-execute state DUP = stackTop state >>= push state >>= return
+execute state DUP = return $ push state $! stackTop state
 execute state (ADJUST v) = return $ state { sp = sp state + v }
 
-execute state (ALLOC i) = pushi newState addr
+execute state (ALLOC i) = return $ pushi newState addr
   where (newHeap, addr) = Heap.allocate (heap state) i
         newState = state { heap = newHeap }
 
-execute state FREE = do
-  (addr, s1) <- popi state
+execute state FREE = return newState
+  where (addr, s1) = popi state
+        newHeap = Heap.free (heap s1) addr
+        newState = s1 { heap = newHeap }
 
-  return s1 { heap = Heap.free (heap s1) addr }
+execute state ADDI = return $ combinei (+) state
+execute state ADDR = return $ combined (+) state
+execute state SUBI = return $ combinei (-) state
+execute state SUBR = return $ combined (-) state
+execute state MULI = return $ combinei (*) state
+execute state MULR = return $ combined (*) state
+execute state DIVI = return $ combinei (div) state
+execute state DIVR = return $ combined (/) state
+execute state MOD = return $ combinei (mod) state
 
-execute state ADDI = combinei (+) state
-execute state ADDR = combined (+) state
-execute state SUBI = combinei (-) state
-execute state SUBR = combined (-) state
-execute state MULI = combinei (*) state
-execute state MULR = combined (*) state
-execute state DIVI = combinei (div) state
-execute state DIVR = combined (/) state
-execute state MOD = combinei (mod) state
+execute state ITOR = return $ pushd newState $ (fromIntegral val :: Double)
+  where (val, newState) = popi state
 
-execute state ITOR = do
-  (val, newState) <- popi state
+execute state RTOI = return $ pushi newState $ round val
+  where (val, newState) = popd state
 
-  pushd newState (fromIntegral val :: Double) >>= return
+execute state EQI = return $ combinei (cmp (==)) state
+execute state EQR = return $ combinedi (cmp (==)) state
+execute state LTI = return $ combinei (cmp (<)) state
+execute state LTR = return $ combinedi (cmp (<)) state
+execute state GTI = return $ combinei (cmp (>)) state
+execute state GTR = return $ combinedi (cmp (>)) state
 
-execute state RTOI = do
-  (val, newState) <- popd state
-
-  pushi newState (round val) >>= return
-
-execute state EQI = combinei (cmp (==)) state
-execute state EQR = combinedi (cmp (==)) state
-execute state LTI = combinei (cmp (<)) state
-execute state LTR = combinedi (cmp (<)) state
-execute state GTI = combinei (cmp (>)) state
-execute state GTR = combinedi (cmp (>)) state
-
-execute state OR = combinei (cmp (\a b -> (a /= 0) || (b /= 0))) state
-execute state AND = combinei (cmp (\a b -> (a /= 0) && (b /= 0))) state
-execute state NOT = do
-  (val, newState) <- popi state
-
-  pushi newState (result val) >>= return
-
-  where result 1 = 0
+execute state OR = return $ combinei (cmp (\a b -> (a /= 0) || (b /= 0))) state
+execute state AND = return $ combinei (cmp (\a b -> (a /= 0) && (b /= 0))) state
+execute state NOT = return $ pushi newState (result val)
+  where (val, newState) = popi state
+        result 1 = 0
         result _ = 1
 
-execute state (IFZ a) = do
-  (val, newState) <- popi state
+execute state (IFZ a) = return $ newState { pc = addr }
+  where (val, newState) = popi state
+        addr = case val of
+                 0 -> translate state a
+                 1 -> pc state
 
-  return (newState { pc = addr val })
-
-  where addr 0 = translate state a
-        addr _ = pc state
-
-execute state (IFNZ a) = do
-  (val, newState) <- popi state
-
-  return (newState { pc = addr val })
-
-  where addr 0 = pc state 
-        addr _ = translate state a
+execute state (IFNZ a) = return $ newState { pc = addr }
+  where (val, newState) = popi state
+        addr = case val of
+                 1 -> translate state a
+                 0 -> pc state
 
 execute state (GOTO a) = return $ state { pc = translate state a }
 
-execute state (CALL r a) = do
-  let !rval = regGet state r
+execute state (CALL r a) = return s4
+  where s1 = pushi state $ pc state
+        s2 = pushi s1 $! regGet state r
+        s3 = s2 { pc = translate s2 a }
+        s4 = regSet s3 r (sp s3)
 
-  s1 <- pushi state $ pc state
-  s2 <- pushi s1 rval
-
-  let s3 = s2 { pc = translate s2 a }
-  
-  return $ regSet s3 r (sp s3)
-
-execute state (RET r) = do
-  (oldreg, s1) <- popi state
-  (oldpc, s2) <- popi s1
-
-  let s3 = regSet s2 r oldreg
-
-  return $ s3 { pc = oldpc }
+execute state (RET r) = return $ s3 { pc = oldpc }
+  where (oldreg, s1) = popi state
+        (oldpc, s2) = popi s1
+        s3 = regSet s2 r oldreg
 
 execute state READI = do
   l <- getLine
   
   case (readP_to_S pi l) of
-    []       -> error "That integer was no good anyway"
-    (v, _):_ -> pushi state v >>= return
+    []          -> error "That integer was no good anyway"
+    (v, _):_ -> return $ pushi state v
 
   where pi = do
           skipSpaces
@@ -336,8 +301,8 @@ execute state READR = do
   l <- getLine
 
   case (readP_to_S pd l) of
-    []       -> error "Double bad"
-    (v, _):_ -> pushd state v >>= return
+    []          -> error "Double bad"
+    (v, _):_ -> return $ pushd state v
 
   where pd = do
           skipSpaces
@@ -349,40 +314,36 @@ execute state READR = do
 
 execute state READC = do 
   c <- getChar
-
-  pushi state (fromIntegral $ ord c) >>= return
+  return $ pushi state (fromIntegral $ ord c)
 
 execute state WRITEI = do
-  (val, s2) <- popi state
-
   putStr $ show val
   return s2
+
+  where (val, s2) = popi state
 
 execute state WRITER = do
-  (val, s2) <- popd state
-
   putStr $ show val
   return s2
 
-execute state WRITEC = do
-  (val, s2) <- popi state
+  where (val, s2) = popd state
 
+execute state WRITEC = do
   putChar $ chr $ fromIntegral val
   return s2
+
+  where (val, s2) = popi state
 
 execute state STOP = return $ state { running = False }
 execute state CORE = do
   putStrLn $ show state
   return state
 
-execute state (TRACE Nothing) = do
-  (flg, newState) <- popi state
-
-  let val = if (flg == 0)
-              then False
-              else True
-
-  return $ newState { tracing = val }
+execute state (TRACE Nothing) = return $ newState { tracing = val }
+  where (flg, newState) = popi state
+        val = if (flg == 0)
+                then False
+                else True
 
 execute state (TRACE (Just v)) = return $ state { tracing = val }
   where val = if (v == 0) 
@@ -394,9 +355,7 @@ execute state _ = return state
 trace :: State -> Instr -> Bool -> IO ()
 trace _ _ False        = return()
 trace state instr True = do
-  els <- getElems $ stack state
-
-  let st = map show $ take (fromIntegral $ sp state) els
+  let st = map show $ take (fromIntegral $ sp state) (stackElems state)
 
   putStrLn $ "----"
   putStrLn $ "Regs\t: [" ++ (intercalate ", " $ map show $ elems $ display state) ++ "]"
@@ -413,7 +372,7 @@ runOnce state = do
   trace state instr (tracing state)
   execute s2 instr >>= return
 
-  where !instr = program state ! pc state
+  where instr = program state ! pc state
         s2    = state { pc = pc state + 1 }
 
 run :: State -> IO State
