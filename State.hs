@@ -88,10 +88,7 @@ stackGet :: State -> Integer -> Slot
 stackGet state i = unsafePerformIO $ readArray (stack state) i
 
 stackSet :: State -> Integer -> Slot -> State
-stackSet state i slot = unsafePerformIO $ do
-  writeArray (stack state) i slot
-
-  return state
+stackSet state i slot = unsafePerformIO $ writeArray (stack state) i slot >> return state
 
 stackElems :: State -> [Slot]
 stackElems state = unsafePerformIO $ getElems (stack state) 
@@ -100,9 +97,9 @@ stackTop :: State -> Slot
 stackTop state = stackGet state $ (sp state - 1)
 
 stackTopI :: State -> Integer
-stackTopI state = case (stackTop state) of
-                    (ISlot val) -> val
-                    _           -> error "Expected integer but found something else"
+stackTopI state = unwrap $ stackTop state
+  where unwrap (ISlot val) = val
+        unwrap _           = error "Expected integer but found something else"
 
 push :: State -> Slot -> State
 push state slot = newState { sp = sp newState + 1 }
@@ -122,16 +119,14 @@ pop state
         !slot     = stackGet newState (sp newState)
 
 popi :: State -> (Integer, State)
-popi state = 
-  case (pop state) of
-    ((ISlot val), state) -> (val, state)
-    _                    -> error "Expected integer slot but found something else"
+popi state = unwrap $ pop state
+  where unwrap ((ISlot val), state) = (val, state)
+        unwrap _                    = error "Expected integer slot but found something else"
 
 popd :: State -> (Double, State)
-popd state =
-  case (pop state) of
-    ((DSlot val), state) -> (val, state)
-    _                    -> error "Expected double slot but found something else"
+popd state = unwrap $ pop state
+  where unwrap ((DSlot val), state) = (val, state)
+        unwrap _                    = error "Expected double slot but found something else"
 
 combine :: (Slot -> Slot -> Slot) -> State -> State
 combine op state = push newState result

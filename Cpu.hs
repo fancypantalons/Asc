@@ -5,6 +5,7 @@ import Text.ParserCombinators.ReadP
 import Parser
 import State
 import Heap as Heap
+import Util
 
 import Data.Char
 import Data.Array.IArray
@@ -17,15 +18,6 @@ translate :: State -> Addr -> Integer
 translate state (Absolute i)   = i
 translate state (Relative r i) = val + i
   where !val = regGet state r
-
---
--- Given a boolean operation and two elements, returns a 1 if the answer
--- is True, and 0 if the answer is False.
---
-cmp :: (a -> a -> Bool) -> a -> a -> Integer
-cmp pred a b = case (pred a b) of
-                 True -> 1
-                 False -> 0
 
 --
 -- Instruction execution logic.
@@ -95,22 +87,20 @@ execute state GTR = return $ combinedi (cmp (>)) state
 
 execute state OR = return $ combinei (cmp (\a b -> (a /= 0) || (b /= 0))) state
 execute state AND = return $ combinei (cmp (\a b -> (a /= 0) && (b /= 0))) state
-execute state NOT = return $ pushi newState (result val)
+execute state NOT = return $ pushi newState (boolToInteger $ not $ integerToBool val)
   where (val, newState) = popi state
-        result 1 = 0
-        result _ = 1
 
 execute state (IFZ a) = return $ newState { pc = addr }
   where (val, newState) = popi state
-        addr = case val of
-                 0 -> translate state a
-                 1 -> pc state
+        addr = if (not $ integerToBool val)
+                 then translate state a
+                 else pc state
 
 execute state (IFNZ a) = return $ newState { pc = addr }
   where (val, newState) = popi state
-        addr = case val of
-                 1 -> translate state a
-                 0 -> pc state
+        addr = if (integerToBool val)
+                 then translate state a
+                 else pc state
 
 execute state (GOTO a) = return $ state { pc = translate state a }
 
@@ -160,40 +150,27 @@ execute state READC = do
   return $ pushi state (fromIntegral $ ord c)
 
 execute state WRITEI = do
-  putStr $ show val
-  return s2
+  let (val, s2) = popi state
 
-  where (val, s2) = popi state
+  (putStr $ show val) >> return s2
 
 execute state WRITER = do
-  putStr $ show val
-  return s2
+  let (val, s2) = popd state
 
-  where (val, s2) = popd state
+  (putStr $ show val) >> return s2
 
 execute state WRITEC = do
-  putChar $ chr $ fromIntegral val
-  return s2
+  let (val, s2) = popi state
 
-  where (val, s2) = popi state
+  (putChar $ chr $ fromIntegral val) >> return s2
 
 execute state STOP = return $ state { running = False }
-execute state CORE = do
-  putStrLn $ show state
-  return state
+execute state CORE = (putStrLn $ show state) >> return state
 
-execute state (TRACE Nothing) = return $ newState { tracing = val }
+execute state (TRACE Nothing) = return $ newState { tracing = integerToBool flg }
   where (flg, newState) = popi state
-        val = if (flg == 0)
-                then False
-                else True
 
-execute state (TRACE (Just v)) = return $ state { tracing = val }
-  where val = if (v == 0) 
-                then False
-                else True
-
-execute state _ = return state
+execute state (TRACE (Just v)) = return $ state { tracing = integerToBool v }
 
 runOnce :: State -> IO State
 runOnce state = do
