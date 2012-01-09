@@ -7,9 +7,9 @@ module State
   RegisterSet,
   InstrList,
   State (running, pc, sp, tracing, display, stack, program, heap),
+  newState,
   regGet,
   regSet,
-  newState,
   stackGet,
   stackSet,
   stackElems,
@@ -24,17 +24,19 @@ module State
   combine,
   combinei,
   combined,
-  combinedi
+  combinedi,
+  dump
 )
 where
 
 import System.IO.Unsafe
 
-import Data.Array.IArray
-import Data.Array.IO
-
 import Parser
 import Heap as Heap
+
+import Data.Array.IArray
+import Data.Array.IO
+import Data.List
 
 data Slot = ISlot Integer | DSlot Double | Empty
 instance Show Slot where
@@ -145,3 +147,28 @@ combined op state = combine (\(DSlot a) (DSlot b) -> DSlot (op a b)) state
 
 combinedi :: (Double -> Double -> Integer) -> State -> State
 combinedi op state = combine (\(DSlot a) (DSlot b) -> ISlot (op a b)) state
+
+--
+-- Some logic to dump a nice trace of the given state instance.
+--
+subgroups :: Int -> [a] -> [[a]]
+subgroups n []  = []
+subgroups n arr = group:(subgroups n rest)
+  where group = take n arr
+        rest  = drop n arr
+
+dump :: State -> IO ()
+dump state = do
+  let st = map show $ take (fromIntegral $ sp state) (stackElems state)
+
+  putStrLn $ "----"
+  putStrLn $ "Regs\t: [" ++ (intercalate ", " $ map show $ elems $ display state) ++ "]"
+  mapM_ putStrLn $ map (\g -> "Stk\t: [" ++ intercalate ", " g ++ "]") $ subgroups 10 st
+  putStrLn $ "Ctrl\t: " ++ intercalate "\t" [ 
+      "PC: " ++ (show $ pc state),
+      "SP: " ++ (show $ sp state)
+    ]
+  putStrLn $ "Heap\t: " ++ (show $ heap state)
+  putStrLn $ "Inst\t: " ++ (show instr) 
+
+  where instr = program state ! pc state
