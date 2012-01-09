@@ -154,7 +154,9 @@ subgroups n arr = group:(subgroups n rest)
 
 dump :: State -> IO ()
 dump state = do
-  let st = map show $ take (fromIntegral $ sp state) (stackElems state)
+  el <- getElems (stack state)
+
+  let st = map show $ take (fromIntegral $ sp state) el
 
   putStrLn $ "----"
   putStrLn $ "Regs\t: [" ++ (intercalate ", " $ map show $ elems $ display state) ++ "]"

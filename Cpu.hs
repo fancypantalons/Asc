@@ -24,28 +24,30 @@ translate state (Relative r i) = val + i
 --
 execute :: State -> Instr -> IO State
 execute state (PUSH a) = return $ push state $! stackGet state $ translate state a
-execute state (PUSHI (Just r)) = return $ push state $! stackGet state $ ((stackTopI state) + regGet state r)
-execute state (PUSHI Nothing) = return $ push newState val
+execute state (PUSHI (Just r)) = return $ push newState $! stackGet state $ (rval + offs)
+  where !rval = regGet state r
+        (offs, newState) = popi state
+
+execute state (PUSHI Nothing) = return $ push newState $! stackGet state top
   where (top, newState) = popi state
-        !val = stackGet state top
 
 execute state (PUSHA a) = return $ pushi state (translate state a)
+execute state (PUSHR r) = return $ pushi state $ regGet state r
 
 execute state (POP a) = return $ stackSet newState (translate state a) top
   where (top, newState) = pop state
 
-execute state (POPI (Just r)) = return $ stackSet newState addr val
+execute state (POPI (Just r)) = return $ stackSet newState (rval + offs) val
   where !rval = regGet state r
-        (val, addr, newState) = 
-          let (v, s) = pop state 
-              ((ISlot a), s2) = pop s
-          in (v, a + rval, s2)
+        (val, s1) = pop state
+        (offs, newState) = popi s1
 
 execute state (POPI Nothing) = return $ stackSet newState addr val
-  where (val, addr, newState) = 
-          let (v, s) = pop state 
-              ((ISlot a), s2) = pop s
-          in (v, a, s2)
+  where (val, s1) = pop state 
+        (addr, newState) = popi s1
+
+execute state (POPR r) = return $ regSet newState r val
+  where (val, newState) = popi state
 
 execute state (CONSTI v) = return $ pushi state v
 execute state (CONSTR v) = return $ pushd state v
