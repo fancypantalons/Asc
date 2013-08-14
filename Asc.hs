@@ -5,7 +5,7 @@ import Cpu
 import State
 
 import System.IO
-import System (getArgs)
+import System.Environment (getArgs)
 
 --
 -- Given the specified program, extract all the labels and map them to their

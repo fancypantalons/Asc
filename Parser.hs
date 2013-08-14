@@ -38,7 +38,6 @@ module Parser
 )
 where
 
-import IO
 import Control.Monad
 
 import Data.Char
